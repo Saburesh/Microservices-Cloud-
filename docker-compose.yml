@@ -1,0 +1,129 @@
+version: "3"
+services:
+  # rabbitmq:
+  #   container_name: "rabbitmq"
+  #   image: rabbitmq:3-management
+  #   hostname: rabbitmq
+  #   ports:
+  #     - "15672:15672"
+  #   expose:
+  #     - "15672:15672"
+  #   environment:
+  #     - RABBITMQ_DEFAULT_USER=guest
+  #     - RABBITMQ_DEFAULT_PASS=guest
+  #   networks:
+  #     - rabbitmq_network
+  #   restart: always
+  producer:
+    build: 
+      context: ./producer
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    expose:
+      - "5001:5001"
+    networks:
+      - microservices_network
+      - rabbitmq_network
+    environment:
+      RABBITMQ_HOST: 172.18.0.1
+    restart: always
+  consumer_one:
+    build: 
+      context: ./consumer_one
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    expose:
+      - "5002:5002"
+    networks:
+      - microservices_network
+      - rabbitmq_network
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_HOST: 172.18.0.1
+    restart: always
+  consumer_two:
+    build: 
+      context: ./consumer_two
+      dockerfile: Dockerfile
+    ports:
+      - "5003:5003"
+    expose:
+      - "5003:5003"
+    networks:
+      - microservices_network
+      - rabbitmq_network
+    environment:
+      RABBITMQ_HOST: 172.18.0.1
+    restart: always
+  consumer_three:
+    build: 
+      context: ./consumer_three
+      dockerfile: Dockerfile
+    ports:
+      - "5004:5004"
+    expose:
+      - "5004:5004"
+    networks:
+      - microservices_network
+      - rabbitmq_network
+    environment:
+      RABBITMQ_HOST: 172.18.0.1
+    restart: always
+  consumer_four:
+    build: 
+      context: ./consumer_four
+      dockerfile: Dockerfile
+    ports:
+      - "5005:5005"
+    expose:
+      - "5005:5005"
+    networks:
+      - microservices_network
+      - rabbitmq_network
+    environment:
+      RABBITMQ_HOST: 172.18.0.1
+    restart: always
+  mysql:
+    image: mariadb:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: k
+      MYSQL_DATABASE: student_record
+    ports:
+      - "3306:3306"
+    expose:
+      - "3306:3306"
+    volumes:
+      - mymariadb-volume:/var/lib/mysql
+    networks:
+      - microservices_network
+      - rabbitmq_network
+networks:
+  rabbitmq_network: 
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
+  microservices_network: 
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+          gateway: 172.19.0.1
+
+# consumer_two:
+#     image: consumer_two_image
+#     networks:
+#       - microservices_network
+#     command: python consumer_two.py
+#     environment:
+#       MYSQL_HOST: mysql
+#     depends_on:
+#       - rabbitmq
+#       - mysql
+#     volumes:
+#       - ./consumer_two:/app
