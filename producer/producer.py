@@ -1,65 +1,100 @@
-import pika
-import time
-from flask import Flask, request
-import uuid
+#!/usr/bin/env python
+
+import pika, sys, json
+from flask import Flask, request, jsonify
+
+connection = pika.BlockingConnection(parameters= pika.ConnectionParameters(host='rabbitmq',heartbeat=0))
+
+channel_health_check = connection.channel()
+channel_insertion = connection.channel()
+channel_deletion = connection.channel()
+channel_read = connection.channel()
+
+channel_health_check.queue_declare(queue='health_check', durable=True)
+channel_insertion.queue_declare(queue='insert_record', durable=True)
+channel_deletion.queue_declare(queue='delete_record', durable=True)
+channel_read.queue_declare(queue='read_database', durable=True)
 
 app = Flask(__name__)
-connection = None
+# app.debug = True
 
-# connect to RabbitMQ
-def connect_rabbitmq():
-    global connection,channel
-    parameters = pika.ConnectionParameters(host='172.18.0.2',heartbeat=0)
-    connection = pika.BlockingConnection(parameters)
-    channel = connection.channel()
+@app.route("/", methods = ["GET"])
+def routes():
+    message = {
+        "to health check": "http://127.0.0.1:5050/health-check",
+        "to read data": "http://127.0.0.1:5050/read-database",
+        "to insert data": "http://127.0.0.1:5050/insert-record",
+        "to delete data": "http://127.0.0.1:5050/delete-record"
+    }
+    
+    return json.dumps(message, indent = 4)
 
-# send message to RabbitMQ
-def send_message(queue_name, message):
-    channel.queue_declare(queue=queue_name)
-    channel.basic_publish(exchange='', routing_key=queue_name, body=message)
-    print(f"Sent message to queue {queue_name}: {message}")
-    channel.stop_consuming()
 
-# create health_check endpoint
-@app.route('/health_check', methods=['GET'])
+@app.route("/health-check", methods = ["GET"])
 def health_check():
-    message = "RabbitMQ connection is established."
-    send_message("health_check", message)
-    # bod=[]
-    # def timer(ch, method, properties,body):
-    #     print(body)
-    #     bod.append(body)
-    #     channel.stop_consuming()
-    # channel.basic_consume(queue="replyqueue",on_message_callback=timer)
-    #channel.start_consuming()
-    return "health check done"
+    message = "health check"
+    channel_health_check.basic_publish(
+        exchange= "", 
+        routing_key="health_check", 
+        body=message,
+        properties=pika.BasicProperties(
+                            delivery_mode = pika.spec.PERSISTENT_DELIVERY_MODE
+                        )
+        )
+    return "Health check"
 
-# create insert_record endpoint
-@app.route('/insert_record/<name>/<srn>/<section>', methods=['GET','POST'])
-def insert_record(name,srn,section):
-    # name=request.form['name']
-    # srn=request.form['srn']
-    # section=request.form['section']
-    if request.method=="GET":
-        message = f"{name},{srn},{section}"
-        send_message("insert", message)
-        print(f"Sent message to queue insert : {message}")
-        return f"Inserted record: {message}"
-    # else:
-        # return "enter name, srn and section as parameters of the url"
+@app.route("/insert-record", methods = ["POST"])
+def insert_record():
+    if request.method == "POST":
+        name = request.form["name"]
+        srn = request.form["srn"]
+        section = request.form["section"]
+        # print({"name": name, "srn": srn, "section": section})
+        # message = jsonify({"name": name, "srn": srn, "section": section})
+        
+        message = json.dumps({"name": name, "srn": srn, "section": section}, indent = 4)
+        print(message)
+        channel_insertion.basic_publish(
+            exchange= "", 
+            routing_key="insert_record", 
+            body=message.encode(),
+            properties=pika.BasicProperties(
+                                delivery_mode = pika.spec.PERSISTENT_DELIVERY_MODE
+                            )
+            )
+    return "Insert Record"
+        
 
-# create read_database endpoint
-@app.route('/read_database', methods=['GET'])
-def read_database():
-    send_message("read", "get all records")
-    return "Record read at consumer side"
-
-# create delete_record endpoint
-@app.route('/delete_record/<srn>', methods=['GET'])
+@app.route("/delete-record/<srn>", methods = ["GET"])
 def delete_record(srn):
-    send_message("delete", srn)
-    return f"Deleted record with SRN: {srn}"
+    #args = request.args
+    message = json.dumps({"srn": srn})
+    channel_deletion.basic_publish(
+        exchange= "", 
+        routing_key="delete_record", 
+        body=message,
+        properties=pika.BasicProperties(
+                            delivery_mode = pika.spec.PERSISTENT_DELIVERY_MODE
+                        )
+        )
+    return "Delete record"
 
-if __name__ == '__main__':
-    connect_rabbitmq()
-    app.run(host="0.0.0.0",debug=True)
+@app.route("/read-database", methods = ["GET"])
+def read_records():
+    # args = request.args
+    # message = json.dumps({"srn": args.get("srn")})
+
+    channel_read.basic_publish(
+        exchange= "", 
+        routing_key="read_database", 
+        body="",
+        properties=pika.BasicProperties(
+                            delivery_mode = pika.spec.PERSISTENT_DELIVERY_MODE
+                        )
+        )
+    return "Read database"
+    
+
+
+if __name__ == "__main__":
+    app.run(port=5050, host="0.0.0.0")
