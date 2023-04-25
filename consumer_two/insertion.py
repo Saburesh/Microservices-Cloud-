@@ -1,50 +1,41 @@
-import pika
-import mysql.connector
-import os
-
-# MySQL database configuration
-mysql_config = {
-  'user': 'root',
-  'password': 'k',
-  'host': 'mymariadb',
-  'database': 'student_record'
-}
-
-# RabbitMQ configuration
-# rabbitmq_config = {
-#   'host': 'localhost',
-#   'queue_name': 'insert_record',
-#   'routing_key': 'insert_record',
-# }
-
-def on_message_received(channel, method, properties, body):
-    # Extract data from message body
-    data = body.decode().split(',')
-
-    # Insert data into MySQL database
-    connection = mysql.connector.connect(**mysql_config)
-    cursor = connection.cursor()
-    sql = "INSERT INTO student (name, srn, section) VALUES (%s, %s, %s)"
-    values = (data[0], data[1], data[2])
-    cursor.execute(sql, values)
-    connection.commit()
-    cursor.close()
-    channel.basic_ack(delivery_tag=method.delivery_tag)
-    connection.close()
-
-    # Acknowledge message
-    #channel.basic_ack(delivery_tag=method.delivery_tag)
+#!/usr/bin/env python
+import pika, sys, os, json
+from pymongo import MongoClient
 
 def main():
-    # Connect to RabbitMQ and start consuming messages
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host="rabbitmq"))
+
+    client = MongoClient("mongodb://mongodb:27017")
+
+    db = client.StudentManagement
+    collection = db.students
+
+    connection = pika.BlockingConnection(parameters= pika.ConnectionParameters(host='rabbitmq'))
     channel = connection.channel()
-    #channel.exchange_declare(exchange=rabbitmq_config['exchange_name'], exchange_type='direct')
-    channel.queue_declare(queue="insert")
-    #channel.queue_bind(exchange=rabbitmq_config['exchange_name'], queue=rabbitmq_config['queue_name'], routing_key=rabbitmq_config['routing_key'])
-    #channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue="insert", on_message_callback=on_message_received)
+
+    channel.queue_declare(queue='insert_record', durable=True)
+
+    def insert_record(ch, method, properties, body):
+        data = json.loads(body)
+        print("[x] Received %r" % data, flush=True)
+        collection.insert_one(data)
+        # time.sleep(body.count(b'.'))
+        # print(" [x] Done")
+        ch.basic_ack(delivery_tag = method.delivery_tag)
+
+    channel.basic_consume(queue= "insert_record", on_message_callback=insert_record)
+
+    print('[*]Insert Record: Waiting for messages. To exit press CTRL+C')
     channel.start_consuming()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print('Interrupted')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
+
+
+
