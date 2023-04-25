@@ -1,31 +1,42 @@
-import pika
-import mysql.connector
-import json
+#!/usr/bin/env python
+import pika, sys, os, json
+from pymongo import MongoClient
 
-def read_database(ch, method, properties, body):
+def main():
+
+    client = MongoClient("mongodb://mongodb:27017")
+
+    db = client.StudentManagement
+    collection = db.students
+
+    connection = pika.BlockingConnection(parameters= pika.ConnectionParameters(host='rabbitmq'))
+    channel = connection.channel()
+
+    channel.queue_declare(queue='read_database', durable=True)
+
+    def read_database(ch, method, properties, body):
+        # data = json.loads(body)
+        # print("[x] Received %r" % data)
+        # print("Found Details: ", collection.find(data))
+        print("Found Details: ", list(collection.find({})), flush=True)
+        # time.sleep(body.count(b'.'))
+        # print(" [x] Done")
+        ch.basic_ack(delivery_tag = method.delivery_tag)
+
+    channel.basic_consume(queue= "read_database", on_message_callback=read_database)
+
+    print('[*]Read Record: Waiting for messages. To exit press CTRL+C')
+    channel.start_consuming()
+
+if __name__ == '__main__':
     try:
-        cnx = mysql.connector.connect(user='root', password='k', host='mymariadb', database='student_record')
-        cursor = cnx.cursor()
-        query = f"SELECT * FROM student"
-        cursor.execute(query)
-        records = cursor.fetchall()
-        print(records)
-        # for record in records:
-        #     print(record)
-        cursor.close()
-        cnx.close()
-        # ch.basic_publish('',routing_key=properties.reply_to,body=json.dumps(records))
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-    except Exception as e:
-        print(f"Error while reading database: {e}")
-        ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+        main()
+    except KeyboardInterrupt:
+        print('Interrupted')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
-channel = connection.channel()
-channel.queue_declare(queue='read')
 
-channel.basic_qos(prefetch_count=1)
-channel.basic_consume(queue='read', on_message_callback=read_database)
 
-print(' [*] Waiting for messages. To exit press CTRL+C')
-channel.start_consuming()
