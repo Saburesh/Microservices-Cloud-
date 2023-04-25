@@ -1,12 +1,20 @@
-FROM python:latest
+# Use the official Python base image
+FROM python:3.9
 
-WORKDIR /consumer_one
+# Set the working directory in the container
+WORKDIR /app
 
-COPY . /consumer_one
+# Copy the requirements.txt file into the container
+COPY requirements.txt .
 
-RUN pip install -r requirements.txt
+# Install the dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 5002
+# Copy the application code into the container
+COPY health_check.py .
 
-CMD ["python", "healthcheck.py"]
+# Expose the port for the HTTP server
+EXPOSE 8081
 
+# Start the application
+CMD ["python", "health_check.py"]
