@@ -17,13 +17,13 @@ def main():
     def delete_record(ch, method, properties, body):
         data = json.loads(body)
         print("[x] Received %r" % data, flush=True)
-        print("Deleted Details: ", list(collection.delete_one(data)), flush=True)
+        print("Deleted Details: ", (collection.delete_one(data)), flush=True)
         # print("Found Details: ", list(collection.find({})))
         # time.sleep(body.count(b'.'))
         # print(" [x] Done")
         ch.basic_ack(delivery_tag = method.delivery_tag)
 
-    channel.basic_consume(queue= "delete_record", on_message_callback=delete_record)
+    channel.basic_consume(queue= "delete_record", on_message_callback=delete_record,auto_ack=True)
 
     print('[*]Delete Record: Waiting for messages. To exit press CTRL+C')
     channel.start_consuming()
