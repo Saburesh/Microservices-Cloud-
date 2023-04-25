@@ -1,66 +1,42 @@
-# import pika
-# import mysql.connector
+#!/usr/bin/env python
+import pika, sys, os, json
+from pymongo import MongoClient
 
-# # RabbitMQ connection setup
-# rabbitmq_connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq', 5672))
-# channel = rabbitmq_connection.channel()
+def main():
 
-# # MySQL connection setup
-# mysql_connection = mysql.connector.connect(
-#   host="localhost",
-#   user="root",
-#   password="password",
-#   database="mydatabase"
-# )
+    client = MongoClient("mongodb://mongodb:27017")
 
-# # RabbitMQ queue setup
-# channel.queue_declare(queue='delete_record', durable=True)
+    db = client.StudentManagement
+    collection = db.students
 
-# # MySQL cursor
-# cursor = mysql_connection.cursor()
+    connection = pika.BlockingConnection(parameters= pika.ConnectionParameters(host='rabbitmq'))
+    channel = connection.channel()
 
-# # RabbitMQ callback function
-# def delete_record_callback(ch, method, properties, body):
-#     srn = body.decode('utf-8')
-#     sql = "DELETE FROM students WHERE SRN = %s"
-#     val = (srn,)
-#     cursor.execute(sql, val)
-#     mysql_connection.commit()
-#     print("Deleted record with SRN: " + srn)
-#     ch.basic_ack(delivery_tag=method.delivery_tag)
+    channel.queue_declare(queue='delete_record', durable=True)
 
-# # RabbitMQ consume from delete_record queue
-# channel.basic_qos(prefetch_count=1)
-# channel.basic_consume(queue='delete_record', on_message_callback=delete_record_callback)
+    def delete_record(ch, method, properties, body):
+        data = json.loads(body)
+        print("[x] Received %r" % data, flush=True)
+        print("Deleted Details: ", list(collection.delete_one(data)), flush=True)
+        # print("Found Details: ", list(collection.find({})))
+        # time.sleep(body.count(b'.'))
+        # print(" [x] Done")
+        ch.basic_ack(delivery_tag = method.delivery_tag)
 
-# # Start consuming
-# print(' [*] Waiting for messages. To exit press CTRL+C')
-# channel.start_consuming()
-import pika
-import mysql.connector
+    channel.basic_consume(queue= "delete_record", on_message_callback=delete_record)
 
-def delete_record(ch, method, properties, body):
+    print('[*]Delete Record: Waiting for messages. To exit press CTRL+C')
+    channel.start_consuming()
+
+if __name__ == '__main__':
     try:
-        srn = body.decode()
-        cnx = mysql.connector.connect(user='root', password='k', host='mymariadb', database='student_record')
-        cursor = cnx.cursor()
-        query = f"DELETE FROM student WHERE srn='{srn}'"
-        cursor.execute(query)
-        cnx.commit()
-        print(f"Deleted record for SRN {srn}")
-        cursor.close()
-        cnx.close()
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-    except Exception as e:
-        print(f"Error while deleting record for SRN {srn}: {e}")
-        ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+        main()
+    except KeyboardInterrupt:
+        print('Interrupted')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-channel = connection.channel()
-channel.queue_declare(queue='delete')
 
-channel.basic_qos(prefetch_count=1)
-channel.basic_consume(queue='delete', on_message_callback=delete_record)
 
-print(' [*] Waiting for messages. To exit press CTRL+C')
-channel.start_consuming()
