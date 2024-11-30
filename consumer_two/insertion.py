@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 import pika, sys, os, json
 from pymongo import MongoClient
 

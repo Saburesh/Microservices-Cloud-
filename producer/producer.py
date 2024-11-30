@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 
 import pika, sys, json
 from flask import Flask, request, jsonify
